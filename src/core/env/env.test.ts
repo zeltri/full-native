@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { load, get, require as requireEnv } from "./env.js";
@@ -10,49 +10,14 @@ function writeEnv(content: string): void {
   writeFileSync(ENV_FILE, content, "utf8");
 }
 
-function saveEnv(keys: string[]): Record<string, string | undefined> {
-  const snapshot: Record<string, string | undefined> = {};
-  for (const key of keys) {
-    snapshot[key] = process.env[key];
-    delete process.env[key];
-  }
-  return snapshot;
-}
-
-function restoreEnv(snapshot: Record<string, string | undefined>): void {
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
-
-const TRACKED_KEYS = [
-  "SIMPLE_KEY",
-  "QUOTED_KEY",
-  "COMMENT_KEY",
-  "HOST",
-  "URL",
-  "CHAIN_A",
-  "CHAIN_B",
-  "CHAIN_C",
-  "CIRC_A",
-  "CIRC_B",
-  "MISSING_REF",
-  "PRESET_VAR",
-  "UNRESOLVED",
-];
-
 describe("env", () => {
-  let snapshot: Record<string, string | undefined>;
-
   beforeEach(() => {
     mkdirSync(TMP, { recursive: true });
-    snapshot = saveEnv(TRACKED_KEYS);
   });
 
   afterEach(() => {
-    restoreEnv(snapshot);
     rmSync(TMP, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   });
 
   describe("load", () => {
@@ -96,7 +61,7 @@ describe("env", () => {
     });
 
     it("no pisa variables ya seteadas en process.env", async () => {
-      process.env.PRESET_VAR = "from-shell";
+      vi.stubEnv("PRESET_VAR", "from-shell");
       writeEnv("PRESET_VAR=from-file\n");
       await load(ENV_FILE);
       expect(process.env.PRESET_VAR).toBe("from-shell");
@@ -123,20 +88,20 @@ describe("env", () => {
     });
 
     it("devuelve el valor si la key existe", () => {
-      process.env.SIMPLE_KEY = "value";
-      expect(get("SIMPLE_KEY")).toBe("value");
+      vi.stubEnv("GET_TEST_VAR", "value");
+      expect(get("GET_TEST_VAR")).toBe("value");
     });
 
     it("devuelve el valor si la key existe, ignorando fallback", () => {
-      process.env.SIMPLE_KEY = "value";
-      expect(get("SIMPLE_KEY", "default")).toBe("value");
+      vi.stubEnv("GET_TEST_VAR", "value");
+      expect(get("GET_TEST_VAR", "default")).toBe("value");
     });
   });
 
   describe("require", () => {
     it("devuelve el valor si la key existe", () => {
-      process.env.SIMPLE_KEY = "value";
-      expect(requireEnv("SIMPLE_KEY")).toBe("value");
+      vi.stubEnv("REQ_TEST_VAR", "value");
+      expect(requireEnv("REQ_TEST_VAR")).toBe("value");
     });
 
     it("lanza Error con el nombre de la key si no existe", () => {
