@@ -10,10 +10,15 @@ export interface ShellConfig {
 
 /** Entrada del historial de comandos ejecutados. */
 export interface HistoryItem {
+  /** Comando ejecutado (script original antes de resolver aliases). */
   command: string;
+  /** Fecha y hora en la que comenzó la ejecución del comando. */
   startedAt: Date;
+  /** Duración total de la ejecución en milisegundos. */
   durationMs: number;
+  /** Código de salida del proceso (`null` si fue terminado por señal). */
   exitCode: number | null;
+  /** `true` si el proceso terminó con código de salida 0. */
   ok: boolean;
 }
 
