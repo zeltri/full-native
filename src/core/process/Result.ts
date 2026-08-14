@@ -1,3 +1,5 @@
+import { ProcessError } from "./ProcessError.js";
+
 /** Resultado de una ejecución de comando que ya terminó. */
 export class Result {
   constructor(
@@ -33,12 +35,14 @@ export class Result {
     return JSON.parse(this.stdout) as T;
   }
 
-  /** Lanza un error si el comando falló. */
+  /** Lanza un ProcessError si el comando falló. */
   throwIfFailed(): this {
     if (this.failed) {
-      throw new Error(
-        `Command "${this.command}" exited with code ${this.exitCode}: ${this.stderr}`,
-      );
+      throw new ProcessError(this.command, this.args, "exit", {
+        exitCode: this.exitCode,
+        signal: this.signal,
+        stderr: this.stderr,
+      });
     }
     return this;
   }
