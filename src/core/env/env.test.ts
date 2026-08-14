@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { load, get, require as requireEnv } from "./env.js";
+import { load, get, requireEnv } from "./env.js";
 
 const TMP = join(process.cwd(), "tmp-env-test");
 const ENV_FILE = join(TMP, ".env");
@@ -98,7 +98,7 @@ describe("env", () => {
     });
   });
 
-  describe("require", () => {
+  describe("requireEnv", () => {
     it("devuelve el valor si la key existe", () => {
       vi.stubEnv("REQ_TEST_VAR", "value");
       expect(requireEnv("REQ_TEST_VAR")).toBe("value");

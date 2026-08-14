@@ -18,6 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ProcessError` class: structured error with command, args, kind, exitCode, signal, stderr, cause.
 - `Shell` session: run, $ tagged template, pipe, chain, ifOk, ifFail, bg, jobs registry, killAll, cd, set/unset, alias/unalias, history.
 - `Job` class: name, autoRestart, restartCount, onRestart, kill, wait, result, full LiveProcess forwarding.
-- `env` module: load (with `${VAR}` interpolation via `util.parseEnv`), get, require.
+- `env` module: load (with `${VAR}` interpolation via `util.parseEnv`), get, requireEnv.
 - 150 tests covering all modules.
 - JSDoc in Spanish across all public APIs.

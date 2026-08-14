@@ -147,11 +147,12 @@ export function get(key: string, fallback?: string): string | undefined {
 
 /**
  * Devuelve el valor de una env var, o lanza `Error` si no existe.
+ * Renombrado desde `require` para evitar colisión con la función global de CJS.
  * @param key Nombre de la variable
  * @returns El valor
  * @throws {Error} Si la variable no existe, con un mensaje que incluye el nombre de la key
  */
-export function require(key: string): string {
+export function requireEnv(key: string): string {
   const value = process.env[key];
   if (value === undefined) {
     throw new Error(`Missing required environment variable: ${key}`);
