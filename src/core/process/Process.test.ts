@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Process, Command, LiveProcess, Result } from "./index.js";
+import { Process, Command, LiveProcess, Result, ProcessError } from "./index.js";
 import * as path from "node:path";
 import * as os from "node:os";
 
@@ -47,9 +47,20 @@ describe("Process", () => {
       expect(result.lines).toEqual(["a", "b", "c"]);
     });
 
-    it("result has throwIfFailed", async () => {
+    it("result has throwIfFailed that throws ProcessError", async () => {
       const result = await proc.run("node", "-e", "process.exit(1)");
-      expect(() => result.throwIfFailed()).toThrow();
+      try {
+        result.throwIfFailed();
+        expect.fail("should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ProcessError);
+        expect(err).toBeInstanceOf(Error);
+        const pe = err as ProcessError;
+        expect(pe.command).toBe("node");
+        expect(pe.kind).toBe("exit");
+        expect(pe.exitCode).toBe(1);
+        expect(pe.signal).toBeNull();
+      }
     });
   });
 
@@ -119,10 +130,15 @@ describe("Command builder", () => {
     expect(result.stdout.trim()).toBe("piped");
   });
 
-  it("throwOnError() rejects on non-zero", async () => {
-    await expect(
-      new Command("node").withArgs("-e", "process.exit(1)").throwOnError().run(),
-    ).rejects.toThrow();
+  it("throwOnError() rejects with ProcessError on non-zero", async () => {
+    try {
+      await new Command("node").withArgs("-e", "process.exit(1)").throwOnError().run();
+      expect.fail("should have rejected");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProcessError);
+      expect((err as ProcessError).kind).toBe("exit");
+      expect((err as ProcessError).exitCode).toBe(1);
+    }
   });
 });
 
@@ -172,9 +188,19 @@ describe("LiveProcess", () => {
     expect(captured!.stdout.trim()).toBe("cb");
   });
 
-  it("wait() rejects on spawn error (ENOENT)", async () => {
+  it("wait() rejects with ProcessError on spawn failure (ENOENT)", async () => {
     const handle = new Process().spawn("nonexistent-binary-xyz123");
-    await expect(handle.wait()).rejects.toThrow();
+    try {
+      await handle.wait();
+      expect.fail("should have rejected");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProcessError);
+      const pe = err as ProcessError;
+      expect(pe.command).toBe("nonexistent-binary-xyz123");
+      expect(pe.kind).toBe("spawn");
+      expect(pe.exitCode).toBeNull();
+      expect(pe.cause).toBeDefined();
+    }
   });
 });
 
@@ -194,9 +220,20 @@ describe("Result", () => {
     expect(r.json()).toEqual({ x: 1 });
   });
 
-  it("throwIfFailed throws on non-zero", () => {
-    const r = new Result("cmd", [], "", "err", 2, null, 0);
-    expect(() => r.throwIfFailed()).toThrow();
+  it("throwIfFailed throws ProcessError on non-zero", () => {
+    const r = new Result("mycmd", ["--flag"], "", "err", 2, null, 0);
+    try {
+      r.throwIfFailed();
+      expect.fail("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProcessError);
+      const pe = err as ProcessError;
+      expect(pe.command).toBe("mycmd");
+      expect(pe.args).toEqual(["--flag"]);
+      expect(pe.kind).toBe("exit");
+      expect(pe.exitCode).toBe(2);
+      expect(pe.stderr).toBe("err");
+    }
   });
 
   it("throwIfFailed returns this on success", () => {

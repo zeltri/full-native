@@ -58,9 +58,9 @@ describe("Shell", () => {
       expect(result.stdout.trim()).toBe("42 true");
     });
 
-    it("throws on unsupported object type", async () => {
+    it("throws TypeError on unsupported object type", async () => {
       const sh = new Shell();
-      expect(() => sh.$`echo ${{ a: 1 }}`).toThrow();
+      expect(() => sh.$`echo ${{ a: 1 }}`).toThrow(TypeError);
     });
   });
 
@@ -75,9 +75,9 @@ describe("Shell", () => {
       expect(result.stdout.trim()).toBe("2");
     });
 
-    it("throws on empty input", async () => {
+    it("throws TypeError on empty input", async () => {
       const sh = new Shell();
-      await expect(sh.pipe()).rejects.toThrow();
+      await expect(sh.pipe()).rejects.toThrow(TypeError);
     });
 
     it("single command returns its result", async () => {
