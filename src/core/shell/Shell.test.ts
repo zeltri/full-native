@@ -169,6 +169,74 @@ describe("Shell", () => {
       expect(job.stdout).toBeDefined();
       expect(job.stderr).toBeDefined();
     });
+
+    it("assigns a name", async () => {
+      const sh = new Shell();
+      const job = sh.bg("echo named", { name: "my-job" });
+      expect(job.name).toBe("my-job");
+      await job.result();
+    });
+
+    it("throws TypeError on duplicate name", async () => {
+      const sh = new Shell();
+      sh.bg("echo first", { name: "dup" });
+      expect(() => sh.bg("echo second", { name: "dup" })).toThrow(TypeError);
+    });
+
+    it("registers job in sh.jobs", async () => {
+      const sh = new Shell();
+      const job = sh.bg("sleep 0.2", { name: "registered" });
+      expect(sh.jobs.get("registered")).toBe(job);
+      expect(sh.activeJobs).toContain(job);
+      await job.result();
+    });
+
+    it("job() retrieves by name", async () => {
+      const sh = new Shell();
+      const job = sh.bg("sleep 0.2", { name: "findable" });
+      expect(sh.job("findable")).toBe(job);
+      expect(sh.job("nonexistent")).toBeUndefined();
+      await job.result();
+    });
+
+    it("killAll terminates all running jobs", async () => {
+      const sh = new Shell();
+      const j1 = sh.bg("sleep 5", { name: "j1" });
+      const j2 = sh.bg("sleep 5", { name: "j2" });
+      expect(sh.activeJobs).toHaveLength(2);
+      sh.killAll();
+      await j1.result();
+      await j2.result();
+      expect(j1.stopped).toBe(true);
+      expect(j2.stopped).toBe(true);
+    });
+
+    it("job exposes stopped, elapsed, command", async () => {
+      const sh = new Shell();
+      const job = sh.bg("sleep 0.1", { name: "props" });
+      expect(job.stopped).toBe(false);
+      expect(job.elapsed).toBeGreaterThanOrEqual(0);
+      expect(job.command).toBeDefined();
+      await job.result();
+    });
+
+    it("autoRestart relaunches on exit", async () => {
+      const sh = new Shell();
+      const job = sh.bg("echo die", { name: "respawn", autoRestart: true });
+      let restarted = false;
+      job.onRestart(() => (restarted = true));
+
+      // wait for first exit + restart
+      await job.wait();
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(job.restartCount).toBeGreaterThanOrEqual(1);
+      expect(restarted).toBe(true);
+
+      // clean up
+      job.kill();
+      await job.wait();
+    });
   });
 
   describe("exists / which", () => {
