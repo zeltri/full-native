@@ -156,7 +156,7 @@ export class Shell {
    */
   async pipe(...scripts: string[]): Promise<Result> {
     if (scripts.length === 0) {
-      throw new Error("pipe requires at least one command");
+      throw new TypeError("pipe requires at least one command");
     }
     if (scripts.length === 1) return this.run(scripts[0]);
 
@@ -286,7 +286,7 @@ export class Shell {
     if (typeof value === "string") {
       return `'${value.replace(/'/g, "'\\''")}'`;
     }
-    throw new Error(`Cannot quote value of type ${typeof value}`);
+    throw new TypeError(`Cannot quote value of type ${typeof value}`);
   }
 
   /** Registra una entrada en el historial. */
