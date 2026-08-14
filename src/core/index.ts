@@ -15,3 +15,4 @@ export {
   type HistoryItem,
   type JobOptions,
 } from "./shell/index.js";
+export { load, get, require } from "./env/index.js";
