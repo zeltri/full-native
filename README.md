@@ -1,6 +1,6 @@
 # fullnative
 
-TypeScript toolchain for Node.js — files, folders, processes, shell sessions, and environment variables with a clean, object-oriented API.
+TypeScript toolchain for Node.js — files, folders, processes, shell sessions, and environment variables with a clean, object-oriented API for stateful resources and functional utilities for the rest.
 
 [![npm](https://img.shields.io/npm/v/fullnative.svg)](https://www.npmjs.com/package/fullnative)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -11,8 +11,9 @@ Node's built-in modules are powerful but verbose. `fullnative` wraps them in sim
 
 - **Zero dependencies** — uses only Node.js built-ins (`fs`, `child_process`, `crypto`, `util.parseEnv`)
 - **Fully typed** — ships with `.d.ts` declarations for every module
-- **Object-oriented** — `File`, `Folder`, `Process`, `Shell` are classes you instantiate and chain
+- **Object-oriented for stateful resources** (`File`, `Folder`, `Process`, `Shell` are classes you instantiate and chain), **functional utilities for the rest** (`env` module is plain functions)
 - **Node.js >= 20.12** — takes advantage of native `util.parseEnv` for `.env` parsing
+- **ESM only** — ships as `"type": "module"` with `import`/`export`. No CJS support.
 
 ## Install
 
@@ -44,9 +45,25 @@ console.log(result.stdout);
 
 ---
 
-## Modules
+## Table of Contents
 
-### File
+- [File](#file)
+- [Folder](#folder)
+- [Process](#process)
+- [Command](#command-immutable-builder)
+- [LiveProcess](#liveprocess-interactive-handle)
+- [Result](#result-finished-command)
+- [ProcessError](#processerror)
+- [Shell](#shell)
+- [Job](#job)
+- [env](#env)
+- [API Reference](#api-reference)
+- [Requirements](#requirements)
+- [Roadmap](#roadmap)
+
+---
+
+## File
 
 Represents a single file on disk. All operations are lazy — they read/write only when invoked.
 
@@ -106,7 +123,7 @@ await file.delete();  // returns true if existed
 
 ---
 
-### Folder
+## Folder
 
 Represents a directory. Supports navigation, recursive listing, streaming walks, copying, moving, and file tree visualization.
 
@@ -119,7 +136,7 @@ const project = new Folder("./my-app");
 await project.ensure();                  // create if missing
 await project.create();                  // mkdir -p
 await project.clear();                    // empty contents
-await project.delete(true);             // recursive delete
+await project.delete(true);               // recursive delete
 
 // Navigation (returns references, doesn't check existence)
 const entry: File = project.file("index.ts");
@@ -172,7 +189,7 @@ console.log(tree);
 
 ---
 
-### Process
+## Process
 
 Facade for executing native commands with a comfortable API.
 
@@ -187,7 +204,7 @@ console.log(result.stdout);      // captured output
 console.log(result.ok);           // true if exitCode === 0
 console.log(result.exitCode);     // 0
 console.log(result.lines);        // stdout split into lines (empty lines filtered)
-console.log(result.durationMs);  // execution time in ms
+console.log(result.durationMs);   // execution time in ms
 
 // Get stdout only (trimmed)
 const branch = await proc.output("git", "rev-parse", "--abbrev-ref", "HEAD");
@@ -204,7 +221,7 @@ if (await proc.exists("docker")) {
 const nodePath = await proc.which("node");  // "/usr/local/bin/node" | null
 ```
 
-#### Command (immutable builder)
+### Command (immutable builder)
 
 Build a command fluently before executing it. Each method returns a **new** `Command`.
 
@@ -223,7 +240,7 @@ const out = await cmd.output();              // stdout.trim()
 const handle = cmd.spawn();                  // returns LiveProcess
 ```
 
-#### LiveProcess (interactive handle)
+### LiveProcess (interactive handle)
 
 A running process you can interact with in real time.
 
@@ -255,7 +272,7 @@ repl.kill("SIGTERM");
 repl.forceKill();  // SIGKILL
 ```
 
-#### Result (finished command)
+### Result (finished command)
 
 Immutable result of a completed command.
 
@@ -279,7 +296,7 @@ result.throwIfFailed();  // throws ProcessError if exitCode !== 0, returns this 
 
 ---
 
-### ProcessError
+## ProcessError
 
 Structured error thrown by `throwIfFailed()`, `throwOnError()`, and `wait()` on spawn failure.
 
@@ -304,9 +321,13 @@ try {
 }
 ```
 
+The `kind` field distinguishes between:
+- `"exit"` — the process started and exited with a non-zero code.
+- `"spawn"` — the process couldn't even start (e.g. ENOENT, permission denied).
+
 ---
 
-### Shell
+## Shell
 
 A shell session with state (cwd, env, aliases, history) that delegates to `Process` internally.
 
@@ -404,7 +425,7 @@ const result = await dev.result();
 sh.killAll();
 ```
 
-#### Job
+### Job
 
 A background process managed by a `Shell` session.
 
@@ -447,12 +468,12 @@ job.forceKill();
 
 ---
 
-### env
+## env
 
 Load `.env` files with `${VAR}` interpolation using Node's native `util.parseEnv`.
 
 ```ts
-import { load, get, require } from "fullnative";
+import { load, get, requireEnv } from "fullnative";
 
 // Load .env (default path: ".env")
 await load();
@@ -461,7 +482,7 @@ await load("./.env.production");
 // Get a variable
 const port = get("PORT");              // string | undefined
 const host = get("HOST", "localhost");  // string (fallback)
-const key = require("API_KEY");         // string — throws if missing
+const key = requireEnv("API_KEY");      // string — throws if missing
 ```
 
 **Behavior:**
@@ -469,7 +490,8 @@ const key = require("API_KEY");         // string — throws if missing
 - Interpolates `${VAR}` references across multiple passes (resolves chains like `A=${B}`, `B=${C}`, `C=value`).
 - Circular references (`A=${B}`, `B=${A}`) are cut off after 5 passes — no infinite loops.
 - Variables already set in `process.env` are **never overwritten** — the real environment always wins.
-- `require("KEY")` throws `Error` with the key name if the variable is missing.
+- `requireEnv("KEY")` throws `Error` with the key name if the variable is missing.
+- **`load()` rejects if the file doesn't exist** — wrap in try/catch if you want optional loading. There is no silent mode.
 
 ---
 
@@ -486,13 +508,14 @@ const key = require("API_KEY");         // string — throws if missing
 | `ProcessError` | Structured error: command, args, kind, exitCode, signal, stderr, cause |
 | `Shell` | Shell session: run, $, pipe, chain, ifOk, ifFail, bg, cd, set/unset, alias, history, killAll |
 | `Job` | Background process: name, autoRestart, restartCount, onRestart, kill, wait, result |
-| `load` | Load `.env` file with `${VAR}` interpolation |
+| `load` | Load `.env` file with `${VAR}` interpolation — rejects if file missing |
 | `get` | Get env var with optional fallback |
-| `require` | Get env var or throw if missing |
+| `requireEnv` | Get env var or throw if missing |
 
 ## Requirements
 
 - **Node.js >= 20.12** (requires `util.parseEnv`)
+- **ESM only** — no CJS support. Use `import`/`export` in your project.
 - **Zero runtime dependencies**
 
 ## Development
@@ -503,6 +526,18 @@ pnpm test          # run 150 tests
 pnpm run typecheck # type check
 pnpm run build     # compile to dist/
 ```
+
+## Roadmap
+
+Planned for future releases:
+
+- **`sleep(ms)`** — promise-based delay
+- **`waitFor(fn, opts)`** — poll until a condition is met
+- **`retry(fn, opts)`** — retry with backoff strategies
+- **`timeout(promise, ms)`** — race a promise against a timer
+- **`onShutdown(fn)`** — register graceful shutdown handlers (SIGINT/SIGTERM)
+- **`tempDir()`** — create and auto-cleanup a temporary directory
+- **Dual CJS/ESM support** — if there's demand from legacy projects
 
 ## License
 
