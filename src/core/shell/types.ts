@@ -16,3 +16,11 @@ export interface HistoryItem {
   exitCode: number | null;
   ok: boolean;
 }
+
+/** Opciones para lanzar un job en segundo plano. */
+export interface JobOptions {
+  /** Nombre identificador del job. Si no se provee, se genera uno automático. */
+  name?: string;
+  /** Si el proceso muere, se reinicia automáticamente. */
+  autoRestart?: boolean;
+}
