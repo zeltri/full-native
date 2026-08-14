@@ -1,7 +1,7 @@
 {
   "name": "fullnative",
   "version": "0.1.0",
-  "description": "A TypeScript package designed to run on Node.js, either locally or as part of a backend server.",
+  "description": "TypeScript toolchain for Node.js — files, folders, processes, shell sessions, and env loading with a clean, object-oriented API.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,7 +14,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -24,15 +27,31 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run typecheck && npm test"
   },
   "keywords": [
     "fullnative",
     "nodejs",
-    "typescript"
+    "typescript",
+    "filesystem",
+    "process",
+    "shell",
+    "cli",
+    "scripting",
+    "dotenv",
+    "env"
   ],
-  "author": "",
+  "author": "Zeltri",
   "license": "MIT",
+  "homepage": "https://github.com/zeltri/full-native#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeltri/full-native.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zeltri/full-native/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
@@ -40,6 +59,6 @@
     "vitest": "^4.1.10"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.12.0"
   }
 }
