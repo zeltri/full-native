@@ -1,12 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { Process, Command, LiveProcess, Result, ProcessError } from "./index.js";
 import * as path from "node:path";
-import * as os from "node:os";
 
 const isWin = process.platform === "win32";
 
 describe("Process", () => {
-  const proc = new Process();
+  let proc: Process;
+
+  beforeEach(() => {
+    proc = new Process();
+  });
 
   describe("run", () => {
     it("executes a command and captures stdout", async () => {
@@ -106,12 +109,10 @@ describe("Command builder", () => {
     expect(result.stdout.trim()).toBe("built");
   });
 
-  it("in() changes cwd", async () => {
-    const tmp = os.tmpdir();
+  it.skipIf(isWin)("in() changes cwd", async () => {
+    const tmp = require("node:os").tmpdir();
     const result = await new Command("pwd").in(tmp).run();
-    if (!isWin) {
-      expect(result.stdout.trim()).toBe(path.resolve(tmp));
-    }
+    expect(result.stdout.trim()).toBe(path.resolve(tmp));
   });
 
   it("withEnv() sets environment variables", async () => {
