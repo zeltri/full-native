@@ -5,6 +5,7 @@ export {
   Command,
   LiveProcess,
   Result,
+  ProcessError,
   type ProcessOptions,
 } from "./process/index.js";
 export {
