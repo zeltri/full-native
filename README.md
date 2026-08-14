@@ -138,7 +138,7 @@ try {
 | Class | Description |
 |---|---|
 | `File` | File operations: read, write, JSON, hash, streams, copy, move |
-| `Folder` | Directory operations: list, walk, tree, find, glob, watch, copy, move |
+| `Folder` | Directory operations: list, walk, tree, find, matchFiles, watch, copy, move |
 | `Process` | Execute native commands: run, spawn, shell, exists, which |
 | `Command` | Immutable builder: withArgs, in, withEnv, withTimeout, withInput, throwOnError |
 | `LiveProcess` | Running process: stdin/stdout/stderr, kill, wait, onOutput, elapsed, stopped |
