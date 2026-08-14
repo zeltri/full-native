@@ -1,7 +1,24 @@
 import { ProcessError } from "./ProcessError.js";
 
-/** Resultado de una ejecución de comando que ya terminó. */
+/**
+ * Resultado inmutable de una ejecución de comando que ya terminó.
+ *
+ * Contiene toda la información de la ejecución: stdout, stderr, código de
+ * salida, señal recibida y duración. Proporciona métodos utilitarios para
+ * inspeccionar y transformar el resultado.
+ */
 export class Result {
+  /**
+   * Crea un nuevo resultado de ejecución.
+   *
+   * @param command - Comando ejecutado.
+   * @param args - Argumentos pasados al comando.
+   * @param stdout - Salida estándar capturada como texto.
+   * @param stderr - Salida de error capturada como texto.
+   * @param exitCode - Código de salida del proceso (`null` si fue terminado por señal).
+   * @param signal - Señal que terminó el proceso, o `null` si terminó naturalmente.
+   * @param durationMs - Duración total de la ejecución en milisegundos.
+   */
   constructor(
     public readonly command: string,
     public readonly args: readonly string[],
@@ -12,30 +29,52 @@ export class Result {
     public readonly durationMs: number,
   ) {}
 
+  /** `true` si el proceso terminó con código de salida 0. */
   get ok(): boolean {
     return this.exitCode === 0;
   }
 
+  /** `true` si el proceso terminó con código de salida distinto de 0. */
   get failed(): boolean {
     return !this.ok;
   }
 
-  /** Combina stdout y stderr en un solo string. */
+  /**
+   * Combina stdout y stderr en un solo string, eliminando espacios
+   * en blanco al final.
+   */
   get output(): string {
     return (this.stdout + this.stderr).trimEnd();
   }
 
-  /** Líneas de stdout sin vacías al final. */
+  /**
+   * Devuelve las líneas de stdout separadas por saltos de línea (`\n` o
+   * `\r\n`), excluyendo las líneas vacías.
+   */
   get lines(): string[] {
     return this.stdout.split(/\r?\n/).filter(Boolean);
   }
 
-  /** Devuelve stdout parseado como JSON. */
+  /**
+   * Parsea stdout como JSON y lo devuelve como tipo `T`.
+   *
+   * **Nota:** Esta función realiza un *cast* sin verificación de tipos en
+   * tiempo de ejecución. La validez del tipo `T` es responsabilidad del
+   * llamador; si la salida no es JSON válido, `JSON.parse` lanzará un
+   * `SyntaxError`.
+   *
+   * @returns El JSON parseado, con tipo `T` (por defecto `unknown`).
+   */
   json<T = unknown>(): T {
     return JSON.parse(this.stdout) as T;
   }
 
-  /** Lanza un ProcessError si el comando falló. */
+  /**
+   * Lanza un `ProcessError` si el comando falló (código de salida != 0).
+   *
+   * @returns `this` si el comando fue exitoso, permitiendo encadenamiento.
+   * @throws {ProcessError} Cuando `failed` es `true`.
+   */
   throwIfFailed(): this {
     if (this.failed) {
       throw new ProcessError(this.command, this.args, "exit", {

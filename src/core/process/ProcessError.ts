@@ -16,13 +16,31 @@
  * }
  */
 export class ProcessError extends Error {
+  /** Comando que originó el error. */
   readonly command: string;
+  /** Argumentos pasados al comando. */
   readonly args: readonly string[];
+  /**
+   * Tipo de fallo: `"spawn"` si el proceso no pudo iniciarse (p. ej. ENOENT,
+   * EACCES) o `"exit"` si terminó con código de salida distinto de 0.
+   */
   readonly kind: "exit" | "spawn";
+  /** Código de salida del proceso; `null` si fue un fallo de spawn o terminó por señal. */
   readonly exitCode: number | null;
+  /** Señal que terminó el proceso, o `null` si no fue por señal. */
   readonly signal: NodeJS.Signals | null;
+  /** Salida de error (stderr) capturada, o cadena vacía si no hubo. */
   readonly stderr: string;
 
+  /**
+   * Crea un `ProcessError`.
+   *
+   * @param command - Comando que originó el error.
+   * @param args - Argumentos pasados al comando.
+   * @param kind - Tipo de fallo: `"spawn"` o `"exit"`.
+   * @param options - Datos adicionales del fallo:
+   *   `exitCode`, `signal`, `stderr` y `cause` (error nativo original).
+   */
   constructor(
     command: string,
     args: readonly string[],

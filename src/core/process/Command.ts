@@ -12,31 +12,57 @@ export class Command {
   private readonly _args: readonly string[];
   private readonly _options: ProcessOptions;
 
+  /**
+   * Crea un nuevo `Command`.
+   *
+   * @param command - Comando a ejecutar.
+   * @param args - Argumentos del comando (por defecto, vacío).
+   * @param options - Opciones de ejecución (por defecto, vacío).
+   */
   constructor(command: string, args: readonly string[] = [], options: ProcessOptions = {}) {
     this._command = command;
     this._args = args;
     this._options = options;
   }
 
+  /** Comando a ejecutar. */
   get command(): string {
     return this._command;
   }
 
+  /** Argumentos del comando. */
   get args(): readonly string[] {
     return this._args;
   }
 
-  /** Crea una nueva instancia con argumentos adicionales. */
+  /**
+   * Crea una nueva instancia de `Command` con argumentos adicionales
+   * añadidos a los existentes.
+   *
+   * @param args - Argumentos a añadir.
+   * @returns Un nuevo `Command` inmutable con los argumentos combinados.
+   */
   withArgs(...args: string[]): Command {
     return new Command(this._command, [...this._args, ...args], this._options);
   }
 
-  /** Crea una nueva instancia cambiando el directorio de trabajo. */
+  /**
+   * Crea una nueva instancia de `Command` cambiando el directorio de trabajo.
+   *
+   * @param cwd - Ruta del directorio de trabajo.
+   * @returns Un nuevo `Command` inmutable con el `cwd` actualizado.
+   */
   in(cwd: string): Command {
     return new Command(this._command, this._args, { ...this._options, cwd });
   }
 
-  /** Crea una nueva instancia con variables de entorno adicionales. */
+  /**
+   * Crea una nueva instancia de `Command` con variables de entorno adicionales,
+   * fusionadas con las existentes (o con `process.env` si no se habían definido).
+   *
+   * @param env - Variables de entorno a añadir o sobrescribir.
+   * @returns Un nuevo `Command` inmutable con el entorno actualizado.
+   */
   withEnv(env: Record<string, string>): Command {
     const baseEnv = this._options.env ?? process.env;
     return new Command(this._command, this._args, {
@@ -45,17 +71,34 @@ export class Command {
     });
   }
 
-  /** Crea una nueva instancia con un timeout en ms. */
+  /**
+   * Crea una nueva instancia de `Command` con un timeout en milisegundos.
+   * Al expirar, el proceso se matará con `SIGTERM`.
+   *
+   * @param ms - Tiempo máximo de ejecución en milisegundos.
+   * @returns Un nuevo `Command` inmutable con el timeout configurado.
+   */
   withTimeout(ms: number): Command {
     return new Command(this._command, this._args, { ...this._options, timeout: ms });
   }
 
-  /** Crea una nueva instancia que envía datos por stdin al iniciar. */
+  /**
+   * Crea una nueva instancia de `Command` que envía datos por stdin al iniciar.
+   *
+   * @param data - Datos a enviar por stdin (texto o buffer).
+   * @returns Un nuevo `Command` inmutable con la entrada configurada.
+   */
   withInput(data: string | Buffer): Command {
     return new Command(this._command, this._args, { ...this._options, input: data });
   }
 
-  /** Crea una nueva instancia que lanza error si sale con código != 0. */
+  /**
+   * Crea una nueva instancia de `Command` que lanza un `ProcessError` si el
+   * proceso termina con código de salida distinto de 0. Esto hace que
+   * `run()` rechace la promesa en lugar de devolver un `Result` fallido.
+   *
+   * @returns Un nuevo `Command` inmutable con `rejectOnNonZero` activado.
+   */
   throwOnError(): Command {
     return new Command(this._command, this._args, {
       ...this._options,
@@ -63,7 +106,12 @@ export class Command {
     });
   }
 
-  /** Ejecuta el comando y devuelve un LiveProcess para interactuar en vivo. */
+  /**
+   * Inicia el comando y devuelve un `LiveProcess` para interactuar en vivo
+   * con stdin/stdout/stderr.
+   *
+   * @returns Un `LiveProcess` que envuelve el proceso hijo recién iniciado.
+   */
   spawn(): LiveProcess {
     const { timeout, input, rejectOnNonZero, ...spawnOpts } = this._options;
     const child = spawn(this._command, [...this._args], spawnOpts);
@@ -83,7 +131,14 @@ export class Command {
     return handle;
   }
 
-  /** Ejecuta el comando, espera a que termine y devuelve el resultado. */
+  /**
+   * Ejecuta el comando, espera a que termine y devuelve el resultado.
+   * Si se configuró `throwOnError`, rechaza con `ProcessError` si el código
+   * de salida no es 0.
+   *
+   * @returns El `Result` de la ejecución.
+   * @throws {ProcessError} Si `rejectOnNonZero` está activo y el código de salida no es 0.
+   */
   async run(): Promise<Result> {
     const handle = this.spawn();
     const result = await handle.wait();
@@ -91,7 +146,12 @@ export class Command {
     return result;
   }
 
-  /** Ejecuta el comando y devuelve solo stdout (trim). */
+  /**
+   * Ejecuta el comando y devuelve solo stdout, con espacios en blanco
+   * eliminados de los extremos (trim).
+   *
+   * @returns El stdout del comando ya trimado.
+   */
   async output(): Promise<string> {
     return (await this.run()).stdout.trim();
   }
