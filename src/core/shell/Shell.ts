@@ -5,7 +5,8 @@ import {
   type ProcessOptions,
 } from "../process/index.js";
 import { Job } from "./Job.js";
-import type { ShellConfig, HistoryItem } from "./types.js";
+import type { ShellConfig, HistoryItem, JobOptions } from "./types.js";
+import * as crypto from "node:crypto";
 
 /**
  * Facade que representa una sesión de shell para ejecutar comandos
@@ -40,6 +41,8 @@ export class Shell {
   private _env: Record<string, string>;
   private _aliases: Map<string, string> = new Map();
   private _history: HistoryItem[] = [];
+  private _jobs: Map<string, Job> = new Map();
+  private _cleanupRegistered = false;
 
   constructor(options: ShellConfig = {}) {
     this._proc = new Process();
@@ -209,19 +212,72 @@ export class Shell {
     return null;
   }
 
-  // ─── Background ──────────────────────────────────────────────────
+  // ─── Background jobs ─────────────────────────────────────────────
 
   /**
-   * Inicia un script en segundo plano y devuelve un `Job`
-   * para monitorizarlo o terminarlo.
+   * Inicia un script en segundo plano y devuelve un `Job` registrado
+   * en la sesión. El job se elimina del registro automáticamente al terminar.
    *
    * @example
-   * const job = sh.bg("npm run dev");
-   * job.onStdout(chunk => process.stdout.write(chunk));
-   * const result = await job.result();
+   * const dev = sh.bg("npm run dev", { name: "dev" });
+   * dev.onOutput(chunk => process.stdout.write(chunk));
+   *
+   * // Más tarde
+   * sh.killAll();
+   *
+   * @example autoRestart
+   * const server = sh.bg("npm run serve", { name: "server", autoRestart: true });
+   * server.onRestart(job => console.log(`Restarted (${job.restartCount})`));
    */
-  bg(script: string): Job {
-    return new Job(this.spawnScript(script));
+  bg(script: string, options?: JobOptions): Job {
+    const name = options?.name ?? crypto.randomUUID();
+    if (this._jobs.has(name)) {
+      throw new TypeError(`Job "${name}" already exists`);
+    }
+
+    const live = this.spawnScript(script);
+    const job = new Job(live, this.resolveAliases(script), { name, ...options });
+    this._jobs.set(name, job);
+    this.ensureCleanup();
+
+    job.onExit(() => {
+      if (job.ended && !job._disposed_) {
+        this._jobs.delete(name);
+      }
+    });
+
+    if (job.autoRestart && !job.ended) {
+      job.onExit(() => {
+        if (job._disposed_) return;
+        const replacement = this.spawnScript(script);
+        job._replace(replacement);
+        this.watchAutoRestart(job, script);
+      });
+    }
+
+    return job;
+  }
+
+  /** Mapa de jobs activos por nombre. */
+  get jobs(): ReadonlyMap<string, Job> {
+    return this._jobs;
+  }
+
+  /** Lista de jobs actualmente en ejecución. */
+  get activeJobs(): readonly Job[] {
+    return [...this._jobs.values()].filter((j) => j.running);
+  }
+
+  /** Mata todos los jobs activos con la señal dada (default SIGTERM). */
+  killAll(signal: NodeJS.Signals = "SIGTERM"): void {
+    for (const job of this._jobs.values()) {
+      if (job.running) job.kill(signal);
+    }
+  }
+
+  /** Devuelve un job por nombre o undefined si no existe. */
+  job(name: string): Job | undefined {
+    return this._jobs.get(name);
   }
 
   // ─── Utilities (delegates to Process) ────────────────────────────
@@ -302,5 +358,32 @@ export class Shell {
       exitCode: result.exitCode,
       ok: result.ok,
     });
+  }
+
+  /** Configura el watcher de autoRestart sobre un job. */
+  private watchAutoRestart(job: Job, script: string): void {
+    job.onExit(() => {
+      if (job._disposed_) return;
+      const replacement = this.spawnScript(script);
+      job._replace(replacement);
+      this.watchAutoRestart(job, script);
+    });
+  }
+
+  /** Registra handlers de proceso para matar jobs huérfanos al salir. */
+  private ensureCleanup(): void {
+    if (this._cleanupRegistered) return;
+    this._cleanupRegistered = true;
+
+    const handler = () => {
+      this.killAll("SIGTERM");
+    };
+
+    process.once("exit", handler);
+    process.once("SIGINT", () => {
+      handler();
+      process.exit(130);
+    });
+    process.once("SIGTERM", handler);
   }
 }
