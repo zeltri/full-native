@@ -17,6 +17,7 @@ export class LiveProcess {
   private _exitCode: number | null = null;
   private _signal: NodeJS.Signals | null = null;
   private _ended = false;
+  private _killed = false;
   readonly onExitPromise: Promise<Result>;
 
   constructor(command: string, args: readonly string[], child: ChildProcess) {
@@ -79,6 +80,16 @@ export class LiveProcess {
     return this._signal;
   }
 
+  /** `true` si el proceso fue matado via `kill()` o `forceKill()`. */
+  get stopped(): boolean {
+    return this._killed;
+  }
+
+  /** Milisegundos transcurridos desde el inicio (en vivo). */
+  get elapsed(): number {
+    return Date.now() - this.startedAt.getTime();
+  }
+
   get stdout(): Readable | null {
     return this.child.stdout;
   }
@@ -124,11 +135,13 @@ export class LiveProcess {
 
   /** Envía una señal al proceso (por defecto SIGTERM). */
   kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this._killed = true;
     return this.child.kill(signal);
   }
 
   /** Fuerza la terminación inmediata (SIGKILL). */
   forceKill(): boolean {
+    this._killed = true;
     return this.child.kill("SIGKILL");
   }
 
@@ -146,6 +159,13 @@ export class LiveProcess {
 
   /** Ejecuta un callback por cada chunk de stderr. */
   onStderr(callback: (chunk: Buffer) => void): this {
+    this.child.stderr?.on("data", callback);
+    return this;
+  }
+
+  /** Ejecuta un callback por cada chunk de stdout o stderr (unificado). */
+  onOutput(callback: (chunk: Buffer) => void): this {
+    this.child.stdout?.on("data", callback);
     this.child.stderr?.on("data", callback);
     return this;
   }

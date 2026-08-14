@@ -172,11 +172,40 @@ describe("LiveProcess", () => {
     expect(chunks.join("")).toBe("chunk");
   });
 
-  it("kill terminates the process", async () => {
+  it("kill terminates the process and marks stopped", async () => {
     const handle = new Process().spawn("node", "-e", "setInterval(()=>{},1000)");
     handle.kill("SIGTERM");
     const result = await handle.wait();
     expect(result.signal).toBe("SIGTERM");
+    expect(handle.stopped).toBe(true);
+  });
+
+  it("stopped is false when process exits naturally", async () => {
+    const handle = new Process().spawn("echo", "done");
+    await handle.wait();
+    expect(handle.stopped).toBe(false);
+  });
+
+  it("onOutput receives chunks from stdout and stderr", async () => {
+    const handle = new Process().spawn(
+      "node",
+      "-e",
+      "process.stdout.write('out'); process.stderr.write('err')",
+    );
+    const chunks: string[] = [];
+    handle.onOutput((c) => chunks.push(c.toString()));
+    await handle.wait();
+    expect(chunks).toContain("out");
+    expect(chunks).toContain("err");
+  });
+
+  it("elapsed returns ms since start", async () => {
+    const handle = new Process().spawn("node", "-e", "setTimeout(()=>{},100)");
+    const before = handle.elapsed;
+    await handle.wait();
+    const after = handle.elapsed;
+    expect(after).toBeGreaterThanOrEqual(100);
+    expect(after).toBeGreaterThanOrEqual(before);
   });
 
   it("onExit callback fires with result", async () => {
