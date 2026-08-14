@@ -13,4 +13,5 @@ export {
   Job,
   type ShellConfig,
   type HistoryItem,
+  type JobOptions,
 } from "./shell/index.js";
