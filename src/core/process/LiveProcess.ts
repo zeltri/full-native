@@ -1,6 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { Result } from "./Result.js";
+import { ProcessError } from "./ProcessError.js";
 
 /**
  * Representa un proceso en ejecución (o ya finalizado).
@@ -34,7 +35,9 @@ export class LiveProcess {
     this.onExitPromise = new Promise<Result>((resolve, reject) => {
       child.on("error", (err: Error) => {
         this._ended = true;
-        reject(err);
+        reject(
+          new ProcessError(this.command, this.args, "spawn", { cause: err }),
+        );
       });
       child.on("exit", (code, signal) => {
         this._exitCode = code;
