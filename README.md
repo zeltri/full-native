@@ -1,4 +1,6 @@
-# fullnative
+![logo](/logo.png)
+
+# Full Native
 
 TypeScript toolchain for Node.js — files, folders, processes, shell sessions, and environment variables with a clean, object-oriented API for stateful resources and functional utilities for the rest.
 
