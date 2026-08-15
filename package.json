@@ -1,6 +1,6 @@
 {
   "name": "fullnative",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript toolchain for Node.js — files, folders, processes, shell sessions, and env loading with a clean, object-oriented API.",
   "type": "module",
   "main": "dist/index.js",
