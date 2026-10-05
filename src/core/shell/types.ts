@@ -1,11 +1,15 @@
-/** Opciones de configuración para una sesión de Shell. */
+/**
+ * Opciones de configuración para una sesión de Shell.
+ *
+ * El shell concreto que interpreta los scripts no se configura aquí: se
+ * elige automáticamente en `Process.shell()` / `Process.spawnScript()`
+ * (`/bin/sh` en Unix, `cmd.exe` en Windows).
+ */
 export interface ShellConfig {
   /** Directorio de trabajo inicial. Por defecto, `process.cwd()`. */
   cwd?: string;
   /** Variables de entorno adicionales. */
   env?: Record<string, string>;
-  /** Shell a utilizar. Por defecto, `/bin/sh` o `cmd.exe`. */
-  shell?: string;
 }
 
 /** Entrada del historial de comandos ejecutados. */

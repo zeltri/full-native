@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Shell, Job } from "./index.js";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as fsp from "node:fs/promises";
 
 const isWin = process.platform === "win32";
 
@@ -74,6 +75,13 @@ describe("Shell", () => {
 
     it("throws TypeError on empty input", async () => {
       await expect(sh.pipe()).rejects.toThrow(TypeError);
+    });
+
+    it("returns failed result when a filter does not match", async () => {
+      // grep zzz no encuentra nada: exit 1 (o 127 si el comando no existe).
+      // No debe haber crash ni rechazo: el pipeline resuelve con un Result fallido.
+      const result = await sh.pipe("echo hi", "grep zzz");
+      expect(result.failed).toBe(true);
     });
 
     it("single command returns its result", async () => {
@@ -252,6 +260,22 @@ describe("Shell", () => {
       expect(sh3.cwd).toBe(tmp);
       const result = await sh3.run("pwd");
       expect(result.stdout.trim()).toBe(path.resolve(tmp));
+    });
+
+    it("resolves relative targets against the session cwd", async () => {
+      const base = await fsp.mkdtemp(path.join(os.tmpdir(), "fullnative-shell-cd-"));
+      try {
+        const subName = "subdir";
+        await fsp.mkdir(path.join(base, subName));
+        const sh3 = new Shell({ cwd: base });
+        sh3.cd(subName);
+        const expected = path.resolve(base, subName);
+        expect(sh3.cwd).toBe(expected);
+        const result = await sh3.run("pwd");
+        expect(result.stdout.trim()).toBe(expected);
+      } finally {
+        await fsp.rm(base, { recursive: true, force: true });
+      }
     });
   });
 

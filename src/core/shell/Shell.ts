@@ -7,6 +7,8 @@ import {
 import { Job } from "./Job.js";
 import type { ShellConfig, HistoryItem, JobOptions } from "./types.js";
 import * as crypto from "node:crypto";
+import * as path from "node:path";
+import type { Readable, Writable } from "node:stream";
 
 /**
  * Facade que representa una sesión de shell para ejecutar comandos
@@ -47,7 +49,7 @@ export class Shell {
   /**
    * Crea una nueva sesión de shell.
    *
-   * @param options - Configuración de la sesión (cwd, env, shell).
+   * @param options - Configuración de la sesión (cwd, env).
    */
   constructor(options: ShellConfig = {}) {
     this._proc = new Process();
@@ -82,11 +84,15 @@ export class Shell {
   /**
    * Cambia el directorio de trabajo de la sesión.
    *
-   * @param path - Ruta del nuevo directorio de trabajo.
+   * La ruta `target` se resuelve contra el cwd actual de la sesión (como
+   * haría el comando `cd` del shell): si es relativa, se resuelve sobre
+   * `_cwd`; si es absoluta, se adopta tal cual.
+   *
+   * @param target - Ruta del nuevo directorio (absoluta o relativa al cwd actual).
    * @returns `this` para encadenamiento.
    */
-  cd(path: string): this {
-    this._cwd = path;
+  cd(target: string): this {
+    this._cwd = path.resolve(this._cwd, target);
     return this;
   }
 
@@ -143,6 +149,10 @@ export class Shell {
    * de forma segura (con quoting automático). Lanza `TypeError` si algún
    * valor interpolado no es de un tipo soportado (string, number, boolean,
    * array, null/undefined).
+   *
+   * El quoting generado sigue el estilo POSIX (`sh`/`bash`), por lo que los
+   * scripts resultantes **no** son seguros para `cmd.exe` en Windows, donde
+   * las reglas de escapado son distintas.
    *
    * @example
    * const name = "world";
@@ -205,14 +215,20 @@ export class Shell {
   /**
    * Ejecuta una serie de comandos en pipeline (stdout de uno al stdin del siguiente).
    * Devuelve el resultado del último comando. Lanza `TypeError` si no se pasa
-   * ningún comando.
+   * ningún comando, o si falta el `stdout` o el `stdin` necesarios en algún
+   * salto del pipeline.
+   *
+   * Si un comando del pipeline no puede iniciarse, el promise rechaza con
+   * `ProcessError` (sin crash del proceso host): los streams pipeados llevan
+   * listeners de error seguros que absorben fallos como `EPIPE`.
    *
    * @example
    * const r = await sh.pipe("cat file.txt", "grep foo", "wc -l");
    *
    * @param scripts - Comandos a ejecutar en pipeline.
    * @returns El resultado del último comando del pipeline.
-   * @throws {TypeError} Cuando `scripts` está vacío.
+   * @throws {TypeError} Cuando `scripts` está vacío, o falta un stream
+   * (`stdout`/`stdin`) necesario en algún salto del pipeline.
    */
   async pipe(...scripts: string[]): Promise<Result> {
     if (scripts.length === 0) {
@@ -225,7 +241,15 @@ export class Shell {
     );
 
     for (let i = 0; i < handles.length - 1; i++) {
-      handles[i]!.stdout?.pipe(handles[i + 1]!.stdin!);
+      const source = handles[i]!.stdout;
+      const target = handles[i + 1]!.stdin;
+      if (!source || !target) {
+        throw new TypeError(
+          `pipe requires stdout on command ${i} and stdin on command ${i + 1}`,
+        );
+      }
+      Shell.attachPipeErrorGuards(source, target);
+      source.pipe(target);
     }
 
     const results = await Promise.all(handles.map((h) => h.wait()));
@@ -401,6 +425,31 @@ export class Shell {
   }
 
   // ─── Private helpers ─────────────────────────────────────────────
+
+  /**
+   * Adjunta listeners de error "seguros" a los streams de un salto de
+   * pipeline, de modo que errores de stream (p. ej. `EPIPE` cuando el
+   * consumidor muere antes de tiempo, o un stdin cerrado tras un spawn
+   * fallido) se absorban silenciosamente en lugar de propagarse como
+   * errores no manejados que crashean el proceso host.
+   *
+   * Los fallos de spawn siguen su curso normal: `LiveProcess.wait()`
+   * rechaza con `ProcessError`.
+   *
+   * @param source - Stream legible (stdout del comando emisor).
+   * @param target - Stream escribible (stdin del comando receptor).
+   */
+  private static attachPipeErrorGuards(
+    source: Readable,
+    target: Writable,
+  ): void {
+    const swallow = (): void => {
+      /* Error de stream absorbido a propósito: el pipeline termina con un
+         `Result` fallido, no debe crashear el proceso host. */
+    };
+    source.on("error", swallow);
+    target.on("error", swallow);
+  }
 
   /**
    * Construye las `ProcessOptions` base incluyendo `cwd` y `env` de la sesión.
