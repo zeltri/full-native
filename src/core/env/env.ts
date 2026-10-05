@@ -91,18 +91,59 @@ function interpolate(
 }
 
 /**
+ * Opciones de `load`.
+ *
+ * Se acepta directamente un `string` (equivalente a `{ path }`) para
+ * mantener la firma previa. Sin argumento, se usa la ruta default.
+ */
+export interface LoadOptions {
+  /**
+   * Ruta al archivo `.env` a cargar (default `".env"`, relativa al cwd del
+   * proceso).
+   */
+  path?: string;
+
+  /**
+   * Si es `true`, las variables del archivo **sobrescriben** las que ya
+   * existan en `process.env`. Default `false`: el entorno real siempre gana
+   * y las variables preexistentes no se tocan (merge con `??=`).
+   */
+  override?: boolean;
+}
+
+/**
  * Carga un archivo `.env`, interpola referencias `${VAR}` y las mergea a
- * `process.env` **sin pisar** variables que ya estén seteadas en el entorno
- * real. El entorno real siempre tiene prioridad sobre el archivo.
+ * `process.env`.
+ *
+ * Semántica de merge (breaking en 1.0):
+ * - **Default**: las variables ya seteadas en el entorno real **no se
+ *   tocan** (merge con `??=`); el entorno real siempre tiene prioridad sobre
+ *   el archivo.
+ * - **`override: true`**: las variables del archivo **sobrescriben** las que
+ *   ya existan en `process.env`.
+ *
+ * Acepta la firma string (`load("./ruta.env")`, equivalente a
+ * `{ path: "./ruta.env" }`) o un objeto `LoadOptions`. Sin argumento, usa la
+ * ruta default `".env"`.
  *
  * El parseo se realiza con `util.parseEnv` de Node.js. Los valores `undefined`
  * resultantes del parseo se descartan antes de interpolar.
  *
- * @param path Ruta al archivo `.env` (default `".env"`)
- * @returns Nada; muta `process.env` como efecto secundario
+ * @param options Ruta al archivo `.env` (default `".env"`) u objeto de
+ *   opciones `LoadOptions`
+ * @returns Un registro con las variables **efectivamente aplicadas** a
+ *   `process.env` por esta llamada: en modo normal, solo las que no existían
+ *   previamente; en modo `override: true`, todas las resueltas
  * @throws {Error} Si el archivo no existe (ENOENT) u otro error de lectura
  */
-export async function load(envPath = ".env"): Promise<void> {
+export async function load(
+  options?: string | LoadOptions,
+): Promise<Record<string, string>> {
+  const opts: LoadOptions =
+    typeof options === "string" ? { path: options } : (options ?? {});
+  const envPath = opts.path ?? ".env";
+  const override = opts.override ?? false;
+
   const raw = await readFile(envPath, "utf8");
   const parsed = parseEnv(raw);
   const clean: Record<string, string> = {};
@@ -111,9 +152,15 @@ export async function load(envPath = ".env"): Promise<void> {
     if (value !== undefined) clean[key] = value;
   }
   const resolved = interpolate(clean);
+
+  const applied: Record<string, string> = {};
   for (const key of Object.keys(resolved)) {
-    process.env[key] ??= resolved[key];
+    if (override || process.env[key] === undefined) {
+      process.env[key] = resolved[key];
+      applied[key] = resolved[key];
+    }
   }
+  return applied;
 }
 
 /**

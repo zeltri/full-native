@@ -1,1 +1,1 @@
-export { load, get, requireEnv } from "./env.js";
+export { load, get, requireEnv, type LoadOptions } from "./env.js";

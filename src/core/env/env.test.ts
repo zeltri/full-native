@@ -76,6 +76,38 @@ describe("env", () => {
     it("rechaza con error claro si el archivo no existe", async () => {
       await expect(load(join(TMP, "nope.env"))).rejects.toThrow();
     });
+
+    it("acepta objeto de opciones { path }", async () => {
+      writeEnv("OBJ_PATH_KEY=hello\n");
+      const applied = await load({ path: ENV_FILE });
+      expect(process.env.OBJ_PATH_KEY).toBe("hello");
+      expect(applied.OBJ_PATH_KEY).toBe("hello");
+    });
+
+    it("el retorno contiene solo las variables aplicadas, no las ignoradas", async () => {
+      vi.stubEnv("APPLIED_PRESET", "from-shell");
+      writeEnv("APPLIED_PRESET=from-file\nAPPLIED_NEW=hello\n");
+      const applied = await load(ENV_FILE);
+      expect(process.env.APPLIED_PRESET).toBe("from-shell");
+      expect(Object.keys(applied)).toEqual(["APPLIED_NEW"]);
+      expect(applied.APPLIED_NEW).toBe("hello");
+    });
+
+    it("override: true pisa la variable ya seteada y la incluye en el retorno", async () => {
+      vi.stubEnv("OVERRIDE_MODE_VAR", "from-shell");
+      writeEnv("OVERRIDE_MODE_VAR=from-file\n");
+      const applied = await load({ path: ENV_FILE, override: true });
+      expect(process.env.OVERRIDE_MODE_VAR).toBe("from-file");
+      expect(applied.OVERRIDE_MODE_VAR).toBe("from-file");
+    });
+
+    it("override: false (default) no pisa la variable ya seteada ni la retorna", async () => {
+      vi.stubEnv("OVERRIDE_MODE_VAR", "from-shell");
+      writeEnv("OVERRIDE_MODE_VAR=from-file\n");
+      const applied = await load({ path: ENV_FILE, override: false });
+      expect(process.env.OVERRIDE_MODE_VAR).toBe("from-shell");
+      expect(applied.OVERRIDE_MODE_VAR).toBeUndefined();
+    });
   });
 
   describe("get", () => {
