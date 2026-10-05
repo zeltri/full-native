@@ -83,6 +83,22 @@ export class Command {
   }
 
   /**
+   * Crea una nueva instancia de `Command` asociada a un `AbortSignal`.
+   * Cuando la señal se aborta, el proceso se matará con `SIGTERM`.
+   *
+   * La señal **no** se pasa al `spawn()` nativo: se cablea manualmente para
+   * que el proceso quede marcado como detenido (`stopped === true`) y la
+   * espera finalice con un `Result` normal en lugar de emitir un error
+   * `AbortError` del child.
+   *
+   * @param signal - Señal que controla la cancelación del proceso.
+   * @returns Un nuevo `Command` inmutable con la señal configurada.
+   */
+  withAbort(signal: AbortSignal): Command {
+    return new Command(this._command, this._args, { ...this._options, signal });
+  }
+
+  /**
    * Crea una nueva instancia de `Command` que envía datos por stdin al iniciar.
    *
    * @param data - Datos a enviar por stdin (texto o buffer).
@@ -110,10 +126,16 @@ export class Command {
    * Inicia el comando y devuelve un `LiveProcess` para interactuar en vivo
    * con stdin/stdout/stderr.
    *
+   * Si hay una señal de aborto configurada (`withAbort`), se cablea
+   * manualmente para matar el proceso con `SIGTERM` al abortar (la señal no
+   * se pasa al `spawn()` nativo, que emitiría un error `AbortError` y no
+   * marcaría el proceso como detenido). El listener se limpia con el
+   * evento `exit` o `error` del child para no filtrar.
+   *
    * @returns Un `LiveProcess` que envuelve el proceso hijo recién iniciado.
    */
   spawn(): LiveProcess {
-    const { timeout, input, rejectOnNonZero, ...spawnOpts } = this._options;
+    const { timeout, input, rejectOnNonZero, signal, ...spawnOpts } = this._options;
     const child = spawn(this._command, [...this._args], spawnOpts);
     const handle = new LiveProcess(this._command, this._args, child);
 
@@ -126,6 +148,20 @@ export class Command {
       setTimeout(() => {
         if (handle.running) handle.kill("SIGTERM");
       }, timeout).unref();
+    }
+
+    if (signal) {
+      const onAbort = () => {
+        if (handle.running) handle.kill("SIGTERM");
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      const cleanup = () => {
+        signal.removeEventListener("abort", onAbort);
+        child.off("exit", cleanup);
+        child.off("error", cleanup);
+      };
+      child.on("exit", cleanup);
+      child.on("error", cleanup);
     }
 
     return handle;

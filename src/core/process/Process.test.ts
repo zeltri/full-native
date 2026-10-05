@@ -45,9 +45,10 @@ describe("Process", () => {
       expect(result.json()).toEqual({ ok: true });
     });
 
-    it("result has lines accessor", async () => {
+    it("result has lines accessor (including empty trailing line)", async () => {
       const result = await proc.run("node", "-e", "console.log('a\\nb\\nc')");
-      expect(result.lines).toEqual(["a", "b", "c"]);
+      expect(result.lines).toEqual(["a", "b", "c", ""]);
+      expect(result.nonEmptyLines).toEqual(["a", "b", "c"]);
     });
 
     it("result has throwIfFailed that throws ProcessError", async () => {
@@ -140,6 +141,31 @@ describe("Command builder", () => {
       expect((err as ProcessError).kind).toBe("exit");
       expect((err as ProcessError).exitCode).toBe(1);
     }
+  });
+
+  it("withTimeout() kills the process when it exceeds the limit", async () => {
+    const start = Date.now();
+    const result = await new Command("node")
+      .withArgs("-e", "setInterval(()=>{},10000)")
+      .withTimeout(200)
+      .run();
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(5000);
+    expect(result.signal).toBe("SIGTERM");
+    expect(result.ok).toBe(false);
+  });
+
+  it("withAbort() kills the process and marks stopped when aborted", async () => {
+    const controller = new AbortController();
+    const handle = new Command("node")
+      .withArgs("-e", "setInterval(()=>{},10000)")
+      .withAbort(controller.signal)
+      .spawn();
+    expect(handle.running).toBe(true);
+    controller.abort();
+    const result = await handle.wait();
+    expect(handle.stopped).toBe(true);
+    expect(result.signal).toBe("SIGTERM");
   });
 });
 
@@ -235,9 +261,15 @@ describe("LiveProcess", () => {
 });
 
 describe("Result", () => {
-  it("lines splits stdout", () => {
+  it("lines splits stdout including empty trailing line", () => {
     const r = new Result("cmd", [], "a\nb\nc\n", "", 0, null, 0);
-    expect(r.lines).toEqual(["a", "b", "c"]);
+    expect(r.lines).toEqual(["a", "b", "c", ""]);
+  });
+
+  it("nonEmptyLines excludes empty lines", () => {
+    const r = new Result("cmd", [], "a\n\nb\nc\n", "", 0, null, 0);
+    expect(r.nonEmptyLines).toEqual(["a", "b", "c"]);
+    expect(r.lines).toEqual(["a", "", "b", "c", ""]);
   });
 
   it("output combines stdout and stderr", () => {

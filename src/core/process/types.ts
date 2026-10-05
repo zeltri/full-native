@@ -6,6 +6,10 @@ import type { SpawnOptions } from "node:child_process";
  * Extiende las opciones nativas de `child_process.spawn` con campos
  * adicionales para controlar timeout, entrada por stdin y comportamiento
  * ante códigos de salida distintos de cero.
+ *
+ * Si se define `signal` (heredado de `SpawnOptions`), no se pasa al
+ * `spawn()` nativo: se cablea manualmente para matar el proceso con
+ * `SIGTERM` al abortar y marcarlo como detenido (`stopped === true`).
  */
 export interface ProcessOptions extends SpawnOptions {
   /** Tiempo máximo de ejecución en ms antes de matar el proceso automáticamente. */

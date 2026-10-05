@@ -48,10 +48,21 @@ export class Result {
   }
 
   /**
-   * Devuelve las líneas de stdout separadas por saltos de línea (`\n` o
-   * `\r\n`), excluyendo las líneas vacías.
+   * Devuelve **todas** las líneas de stdout separadas por saltos de línea
+   * (`\n` o `\r\n`), incluidas las vacías (comportamiento estándar de
+   * `String.split`). Una salida terminada en salto de línea produce una
+   * línea vacía al final.
    */
   get lines(): string[] {
+    return this.stdout.split(/\r?\n/);
+  }
+
+  /**
+   * Devuelve las líneas no vacías de stdout separadas por saltos de línea
+   * (`\n` o `\r\n`). Ignora las líneas vacías, incluida la que produce la
+   * salida terminada en salto de línea.
+   */
+  get nonEmptyLines(): string[] {
     return this.stdout.split(/\r?\n/).filter(Boolean);
   }
 
