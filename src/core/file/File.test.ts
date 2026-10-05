@@ -3,7 +3,7 @@ import { File } from "./File.js";
 import { Folder } from "./Folder.js";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 let TMP = "";
 
@@ -152,6 +152,11 @@ describe("File", () => {
       expect(file.dirname).toBe(dir);
     });
 
+    it("absolute resolves relative paths", () => {
+      const file = new File("relative/f.txt");
+      expect(file.absolute).toBe(resolve("relative", "f.txt"));
+    });
+
     it("infers mimeType", () => {
       expect(new File(join(dir, "a.json")).mimeType).toBe("application/json");
       expect(new File(join(dir, "a.unknown")).mimeType).toBe(
@@ -213,32 +218,40 @@ describe("File", () => {
       expect(await copy.read()).toBe("x");
     });
 
-    it("moveTo mutates this.path and returns this", async () => {
+    it("moveTo returns a NEW File and keeps this.path", async () => {
       const src = new File(join(dir, "mv.txt"));
       await src.write("data");
       const originalPath = src.path;
       const result = await src.moveTo(join(dir, "moved.txt"));
-      expect(result).toBe(src);
-      expect(src.path).toBe(join(dir, "moved.txt"));
-      expect(await src.read()).toBe("data");
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(dir, "moved.txt"));
+      expect(src.path).toBe(originalPath);
+      expect(await result.read()).toBe("data");
       expect(await new File(originalPath).exists()).toBe(false);
     });
 
-    it("moveInto mutates this.path keeping the name", async () => {
+    it("moveInto returns a NEW File keeping the name", async () => {
       const src = new File(join(dir, "mi.txt"));
       await src.write("y");
       const sub = join(dir, "midest");
-      await src.moveInto(sub);
-      expect(src.path).toBe(join(sub, "mi.txt"));
-      expect(await src.read()).toBe("y");
+      const result = await src.moveInto(sub);
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(sub, "mi.txt"));
+      expect(src.path).toBe(join(dir, "mi.txt"));
+      expect(await result.read()).toBe("y");
+      expect(await src.exists()).toBe(false);
     });
 
-    it("rename mutates this.path within same dir", async () => {
+    it("rename returns a NEW File and keeps this.path", async () => {
       const src = new File(join(dir, "old.txt"));
       await src.write("r");
-      await src.rename("new.txt");
-      expect(src.path).toBe(join(dir, "new.txt"));
-      expect(await src.read()).toBe("r");
+      const originalPath = src.path;
+      const result = await src.rename("new.txt");
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(dir, "new.txt"));
+      expect(src.path).toBe(originalPath);
+      expect(await result.read()).toBe("r");
+      expect(await new File(originalPath).exists()).toBe(false);
     });
   });
 
@@ -540,37 +553,92 @@ describe("Folder", () => {
       expect(await copy.file("y.txt").read()).toBe("y");
     });
 
-    it("moveTo mutates this.path and returns this", async () => {
+    it("moveTo returns a NEW Folder and keeps this.path", async () => {
       const src = new Folder(join(dir, "mvsrc"));
       await src.ensure();
       await src.createFile("z.txt", "z");
       const originalPath = src.path;
       const result = await src.moveTo(join(dir, "mvdest"));
-      expect(result).toBe(src);
-      expect(src.path).toBe(join(dir, "mvdest"));
-      expect(await src.file("z.txt").read()).toBe("z");
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(dir, "mvdest"));
+      expect(src.path).toBe(originalPath);
+      expect(await result.file("z.txt").read()).toBe("z");
+      expect(await result.exists()).toBe(true);
       expect(await new Folder(originalPath).exists()).toBe(false);
     });
 
-    it("rename mutates this.path within same parent", async () => {
+    it("moveInto returns a NEW Folder keeping the name", async () => {
+      const src = new Folder(join(dir, "misrc"));
+      await src.ensure();
+      await src.createFile("w.txt", "w");
+      const parent = join(dir, "miparent");
+      const result = await src.moveInto(parent);
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(parent, src.name));
+      expect(src.path).toBe(join(dir, "misrc"));
+      expect(await result.file("w.txt").read()).toBe("w");
+    });
+
+    it("rename returns a NEW Folder and keeps this.path", async () => {
       const src = new Folder(join(dir, "oldname"));
       await src.ensure();
-      await src.rename("newname");
-      expect(src.path).toBe(join(dir, "newname"));
-      expect(await src.exists()).toBe(true);
+      const originalPath = src.path;
+      const result = await src.rename("newname");
+      expect(result).not.toBe(src);
+      expect(result.path).toBe(join(dir, "newname"));
+      expect(src.path).toBe(originalPath);
+      expect(await result.exists()).toBe(true);
       expect(await new Folder(join(dir, "oldname")).exists()).toBe(false);
     });
   });
 
   describe("tree", () => {
-    it("generates a tree representation", async () => {
+    it("generates an exact tree rendering each entry once with correct connectors", async () => {
       const folder = new Folder(join(dir, "tree"));
+      await folder.ensure();
+      // Creación en orden alfabético: el render es estable aunque `readdir`
+      // devuelva por orden de inserción o por nombre.
+      await folder.createFile("a.txt", "a");
+      await folder.createDir("mid");
+      await folder.createDir("sub");
+      await folder.createDir("sub/inner");
+      await folder.file("sub/inner/deep.txt").write("d");
+      await folder.file("sub/nested.txt").write("n");
+      await folder.createFile("z.txt", "z");
+
+      const tree = await folder.tree();
+      expect(tree).toBe(
+        [
+          "tree/",
+          "├── a.txt",
+          "├── mid/",
+          "├── sub/",
+          "│   ├── inner/",
+          "│   │   └── deep.txt",
+          "│   └── nested.txt",
+          "└── z.txt",
+        ].join("\n"),
+      );
+    });
+
+    it("uses plain-space indent under a last sibling dir", async () => {
+      const folder = new Folder(join(dir, "tree2"));
       await folder.ensure();
       await folder.createFile("a.txt", "a");
       await folder.createDir("sub");
+      await folder.file("sub/x.txt").write("x");
+      await folder.file("sub/y.txt").write("y");
+
       const tree = await folder.tree();
-      expect(tree).toContain("a.txt");
-      expect(tree).toContain("sub");
+      expect(tree).toBe(
+        [
+          "tree2/",
+          "├── a.txt",
+          "└── sub/",
+          "    ├── x.txt",
+          "    └── y.txt",
+        ].join("\n"),
+      );
     });
   });
 

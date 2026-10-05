@@ -34,6 +34,11 @@ export class File {
     return path.dirname(this.path);
   }
 
+  /** Ruta absoluta resuelta del archivo. */
+  get absolute(): string {
+    return path.resolve(this.path);
+  }
+
   /**
    * Tipo MIME inferido a partir de la extensión del archivo.
    * Devuelve `application/octet-stream` para extensiones desconocidas.
@@ -298,7 +303,7 @@ export class File {
 
   /**
    * Cambia los permisos del archivo.
-   * @param mode Máscode de permisos numérico (ej. `0o644`).
+   * @param mode Máscara de permisos numérica (ej. `0o644`).
    * @returns Promesa que se resuelve al completar el cambio.
    */
   async chmod(mode: number): Promise<void> {
@@ -401,37 +406,34 @@ export class File {
 
   /**
    * Mueve este archivo a una ruta destino. Crea el directorio padre del destino
-   * automáticamente si no existe. **Muta `this.path`** al nuevo destino y
-   * devuelve `this` para encadenamiento.
+   * automáticamente si no existe.
    * @param dest Ruta absoluta del archivo destino.
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `File` apuntando al destino; la
+   * instancia original conserva su ruta anterior.
    */
-  async moveTo(dest: string): Promise<this> {
+  async moveTo(dest: string): Promise<File> {
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.rename(this.path, dest);
-    this.path = dest;
-    return this;
+    return new File(dest);
   }
 
   /**
    * Mueve este archivo dentro de un directorio, conservando su nombre.
-   * **Muta `this.path`** y devuelve `this`.
    * @param dir Ruta del directorio destino.
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `File` apuntando a `dir/name`; la
+   * instancia original conserva su ruta anterior.
    */
-  async moveInto(dir: string): Promise<this> {
-    await this.moveTo(path.join(dir, this.name));
-    return this;
+  async moveInto(dir: string): Promise<File> {
+    return this.moveTo(path.join(dir, this.name));
   }
 
   /**
    * Renombra este archivo dentro de su mismo directorio.
-   * **Muta `this.path`** y devuelve `this`.
    * @param newName Nuevo nombre del archivo (sin ruta).
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `File` apuntando al nuevo nombre; la
+   * instancia original conserva su ruta anterior.
    */
-  async rename(newName: string): Promise<this> {
-    await this.moveTo(path.join(this.dirname, newName));
-    return this;
+  async rename(newName: string): Promise<File> {
+    return this.moveTo(path.join(this.dirname, newName));
   }
 }

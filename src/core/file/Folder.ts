@@ -115,7 +115,7 @@ export class Folder {
    */
   async delete(recursive = false): Promise<boolean> {
     if (!(await this.exists())) return false;
-    await fs.rmdir(this.path, { recursive });
+    await fs.rm(this.path, { recursive, force: true });
     return true;
   }
 
@@ -139,7 +139,7 @@ export class Folder {
 
   /**
    * Cambia los permisos del directorio.
-   * @param mode Máscode de permisos numérico (ej. `0o755`).
+   * @param mode Máscara de permisos numérica (ej. `0o755`).
    * @returns Promesa que se resuelve al completar el cambio.
    */
   async chmod(mode: number): Promise<void> {
@@ -390,38 +390,35 @@ export class Folder {
 
   /**
    * Mueve este directorio a una ruta destino. Crea el directorio padre del
-   * destino automáticamente si no existe. **Muta `this.path`** al nuevo destino
-   * y devuelve `this` para encadenamiento.
+   * destino automáticamente si no existe.
    * @param dest Ruta absoluta del directorio destino.
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `Folder` apuntando al destino; la
+   * instancia original conserva su ruta anterior.
    */
-  async moveTo(dest: string): Promise<this> {
+  async moveTo(dest: string): Promise<Folder> {
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.rename(this.path, dest);
-    this.path = dest;
-    return this;
+    return new Folder(dest);
   }
 
   /**
    * Mueve este directorio dentro de otro, conservando su nombre.
-   * **Muta `this.path`** y devuelve `this`.
    * @param parent Ruta del directorio padre destino.
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `Folder` apuntando a `parent/name`; la
+   * instancia original conserva su ruta anterior.
    */
-  async moveInto(parent: string): Promise<this> {
-    await this.moveTo(path.join(parent, this.name));
-    return this;
+  async moveInto(parent: string): Promise<Folder> {
+    return this.moveTo(path.join(parent, this.name));
   }
 
   /**
    * Renombra este directorio dentro de su mismo directorio padre.
-   * **Muta `this.path`** y devuelve `this`.
    * @param newName Nuevo nombre del directorio (sin ruta).
-   * @returns La misma instancia (`this`) con `path` actualizado.
+   * @returns Una **nueva** instancia de `Folder` apuntando al nuevo nombre; la
+   * instancia original conserva su ruta anterior.
    */
-  async rename(newName: string): Promise<this> {
-    await this.moveTo(path.join(this.parent, newName));
-    return this;
+  async rename(newName: string): Promise<Folder> {
+    return this.moveTo(path.join(this.parent, newName));
   }
 
   /**
@@ -442,28 +439,53 @@ export class Folder {
    */
   async tree(): Promise<string> {
     const lines: string[] = [];
+
+    /**
+     * Pinta cada entrada exactamente una vez: la línea del nodo actual y las
+     * de sus hijos. `render` siempre recibe la lista completa de hermanos para
+     * decidir por sí misma qué conector usa (`├──` o `└──`) y con qué prefijo
+     * indenta a los hijos (`│   ` si no es el último, `    ` si lo es).
+     * @param dir Directorio que se está renderizando.
+     * @param prefix Indentación acumulada heredada de los ancestros.
+     * @param items Entradas del directorio (hermanos entre sí).
+     * @param index Índice de `dir` dentro de `items` (para el conector propio).
+     */
     const render = async (
       dir: Folder,
       prefix: string,
-      isLast: boolean,
+      items: readonly (File | Folder)[],
+      index: number,
     ): Promise<void> => {
-      const connector = isLast ? "└── " : "├── ";
+      const last = index === items.length - 1;
+      const connector = last ? "└── " : "├── ";
       lines.push(`${prefix}${connector}${dir.name}/`);
-      const items = await dir.list();
-      const childPrefix = prefix + (isLast ? "    " : "│   ");
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const last = i === items.length - 1;
-        const childConnector = last ? "└── " : "├── ";
+
+      const childPrefix = prefix + (last ? "    " : "│   ");
+      const children = await dir.list();
+      for (let i = 0; i < children.length; i++) {
+        const item = children[i];
         if (item instanceof Folder) {
-          lines.push(`${childPrefix}${childConnector}${item.name}/`);
-          await render(item, childPrefix + (last ? "    " : "│   "), true);
+          await render(item, childPrefix, children, i);
         } else {
-          lines.push(`${childPrefix}${childConnector}${item.name}`);
+          const childLast = i === children.length - 1;
+          lines.push(
+            `${childPrefix}${childLast ? "└── " : "├── "}${item.name}`,
+          );
         }
       }
     };
-    await render(this, "", true);
+
+    lines.push(`${this.name}/`);
+    const items = await this.list();
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item instanceof Folder) {
+        await render(item, "", items, i);
+      } else {
+        const last = i === items.length - 1;
+        lines.push(`${last ? "└── " : "├── "}${item.name}`);
+      }
+    }
     return lines.join("\n");
   }
 }
