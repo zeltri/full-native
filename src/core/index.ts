@@ -15,4 +15,12 @@ export {
   type HistoryItem,
   type JobOptions,
 } from "./shell/index.js";
-export { load, get, requireEnv } from "./env/index.js";
+export { load, get, requireEnv, type LoadOptions } from "./env/index.js";
+export {
+  sleep,
+  timeout,
+  TimeoutError,
+  tempDir,
+  TempDir,
+  type TempDirOptions,
+} from "./utils/index.js";
